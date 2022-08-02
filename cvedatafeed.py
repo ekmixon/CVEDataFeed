@@ -30,8 +30,7 @@ elif env_loglevel == "DEBUG":
 else:
 	loglevel = logging.INFO
 
-env_logfile = os.environ.get('LOG_FILE', False)
-if env_logfile:
+if env_logfile := os.environ.get('LOG_FILE', False):
 	loghandler = [ logging.FileHandler("debug.log"), logging.StreamHandler()]
 else:
 	loghandler = [ logging.StreamHandler()]
@@ -43,50 +42,35 @@ logging.basicConfig(
 )
 
 def saveConfigkey(configname, value):
-	findrecord = {}
-	findrecord['name'] = configname
+	findrecord = {'name': configname}
 	newvalues = { "$set": { "value": value } }
 	mongo.db.configuration.update_one(findrecord, newvalues, upsert=True)
 
 def getConfigkey(configname):
-	findrecord = {}
-	findrecord['name'] = configname
+	findrecord = {'name': configname}
 	result = mongo.db.configuration.find_one(findrecord)
-	if result == None:
-		return "0"
-	else:
-		return result['value']
+	return "0" if result is None else result['value']
 
 def saveStatistic(statname, value):
-	findrecord = {}
-	findrecord['statname'] = statname
+	findrecord = {'statname': statname}
 	newvalues = { "$set": { "value": value } }
 	mongo.db.statistics.update_one(findrecord, newvalues, upsert=True)
 
 def getStatistic(statname):
-	findrecord = {}
-	findrecord['statname'] = statname
+	findrecord = {'statname': statname}
 	result = mongo.db.statistics.find_one(findrecord)
-	if result == None:
-		return "0"
-	else:
-		return result['value']
+	return "0" if result is None else result['value']
 
 def getCveList(nameid):
-	findrecord = {}
-	findrecord['nameid'] = nameid
+	findrecord = {'nameid': nameid}
 	result = mongo.db.cvelists.find_one(findrecord)
-	if result == None:
-		return "0"
-	else:
-		return result['cves']
+	return "0" if result is None else result['cves']
 
 def updateVulTypeCollection(cveid, vultype):
 	try:
 		if vultype[0] != "None":
 			for t in vultype:
-				findrecord = {}
-				findrecord['vultype'] = t
+				findrecord = {'vultype': t}
 				if mongo.db.vultypes.count_documents(findrecord) == 0:
 					findrecord['cves'] = [cveid]
 					findrecord['numberofcve'] = 1
@@ -97,23 +81,22 @@ def updateVulTypeCollection(cveid, vultype):
 					newvalues = { "$inc": { "numberofcve": 1 } }
 					mongo.db.vultypes.update_one(findrecord, newvalues)
 	except Exception as e:
-		logging.error("Exception in updateVulTypeCollection %s" % e)
+		logging.error(f"Exception in updateVulTypeCollection {e}")
 
 def getCVEtitle(cvejson):
 	fmvultype = ""
 	for t in cvejson["vultype"]:
 		if fmvultype != "":
-			fmvultype = fmvultype + ", "
+			fmvultype = f"{fmvultype}, "
 		fmvultype = fmvultype + t.replace("_", " ").replace("-", " ").replace("\\","").replace("/","").replace("..",":").strip().title()
 	if len(cvejson["affected"]) == 0:
 		strproduct = "Unknown"
 	else:
 		aff = cvejson["affected"][0]
 		ar = aff.split(":")
-		strproduct = "%s_%s" % (ar[1], ar[2])
+		strproduct = f"{ar[1]}_{ar[2]}"
 		strproduct = strproduct.replace("_", " ").replace("-", " ").replace("\\","").replace("/","").replace("..",":").strip().title()
-	cvetitle = "%s: %s vulnerability on %s" % (cvejson["CVEID"], fmvultype, strproduct)
-	return cvetitle
+	return f'{cvejson["CVEID"]}: {fmvultype} vulnerability on {strproduct}'
 
 def insertNewCVE(cvejson):
 	try:
@@ -121,48 +104,42 @@ def insertNewCVE(cvejson):
 		cvejson["title"] = cvetitle
 		return mongo.db.cves.insert_one(cvejson).inserted_id
 	except Exception as e:
-		logging.error("Exception in insertNewCVE %s" % e)
+		logging.error(f"Exception in insertNewCVE {e}")
 		return -1
 
 def replaceCVE(cveid, newcve):
 	try:
 		cvetitle = getCVEtitle(newcve)
 		newcve["title"] = cvetitle
-		findrecord = {}
-		findrecord['CVEID'] = cveid
+		findrecord = {'CVEID': cveid}
 		return mongo.db.cves.replace_one(findrecord, newcve)
 	except Exception as e:
-		logging.error("Exception in replaceCVE %s" % e)
+		logging.error(f"Exception in replaceCVE {e}")
 		return -1
 
 def getCVE(cveid):
-	findrecord = {}
-	findrecord['CVEID'] = cveid
+	findrecord = {'CVEID': cveid}
 	result = mongo.db.cves.find_one(findrecord)
-	if result == None:
-		return 0
-	else:
-		return result
+	return 0 if result is None else result
 
 def checkCveExist(cveid):
-	findrecord = {}
-	findrecord['CVEID'] = cveid
+	findrecord = {'CVEID': cveid}
 	return mongo.db.cves.count_documents(findrecord)
 
 # cpe 2.3 parser processing
 def getCompressCpeStr(Cpestr):
 	arrstr = Cpestr.replace("\\:", "..").split(':')
-	if(len(arrstr) < 7 or arrstr[0] != 'cpe' or arrstr[1] != '2.3'):
-		logging.error("Wrong format in getCompressCpeStr with %s" % Cpestr)
+	if (len(arrstr) < 7 or arrstr[0] != 'cpe' or arrstr[1] != '2.3'):
+		logging.error(f"Wrong format in getCompressCpeStr with {Cpestr}")
 		return Cpestr
 	else:
 		version = arrstr[5]
 		for i in range(6,len(arrstr)):
-			if(arrstr[i]!='*'):
-				version = version + '_' + arrstr[i]
+			if (arrstr[i]!='*'):
+				version = f'{version}_{arrstr[i]}'
 			else:
 				continue
-		return "%s:%s:%s:%s" % (arrstr[2], arrstr[3], arrstr[4], version)
+		return f"{arrstr[2]}:{arrstr[3]}:{arrstr[4]}:{version}"
 
 # method: del/add
 def getNewScoreAvg(method, lstscore, curavg, numberofcve, jsoncve):
@@ -175,16 +152,17 @@ def getNewScoreAvg(method, lstscore, curavg, numberofcve, jsoncve):
 			lstscore[keyscore] = ototal + 1
 		elif method == "del":
 			lstscore[keyscore] = ototal - 1
-	else:
-		if method == "add":
-			lstscore[keyscore] = 1
+	elif method == "add":
+		lstscore[keyscore] = 1
 	if method == "add":
 		newavg = (curavg * numberofcve + jsoncve["baseScore"]) / (numberofcve + 1)
 	elif method == "del":
-		if (numberofcve - 1) == 0:
-			newavg = 0
-		else:
-			newavg = (curavg * numberofcve - jsoncve["baseScore"]) / (numberofcve - 1)
+		newavg = (
+			0
+			if numberofcve == 1
+			else (curavg * numberofcve - jsoncve["baseScore"]) / (numberofcve - 1)
+		)
+
 	return {"scorestat": lstscore, "avgscore": newavg}
 
 def getNewVultypeStat(method, curstat, jsoncve):
@@ -201,16 +179,11 @@ def getNewVultypeStat(method, curstat, jsoncve):
 			foundindex = i
 			existstat = curstat[i]
 			break
-	
+
 	if foundindex == -1:
-		newstat = {}
-		newstat["year"] = year
-		newstat["vuls"] = {}
+		newstat = {"year": year, "vuls": {}}
 		for vul in lstvultype:
-			if vul in vultype:
-				newstat["vuls"][vul] = 1
-			else:
-				newstat["vuls"][vul] = 0
+			newstat["vuls"][vul] = 1 if vul in vultype else 0
 		if method == "add":
 			curstat.append(newstat)
 	else:
@@ -221,25 +194,23 @@ def getNewVultypeStat(method, curstat, jsoncve):
 			elif method == "del":
 				newstat["vuls"][vul] = existstat["vuls"][vul] - 1
 		curstat[foundindex] = newstat
-	
+
 	return curstat
 		
 def addCveidtoVersion(versionstr, jsoncve):
 	Cveid = jsoncve["CVEID"]
-	findrecord = {}
-	findrecord['versionid'] = versionstr
+	findrecord = {'versionid': versionstr}
+	findlist = {}
 	if mongo.db.versions.count_documents(findrecord) == 0:
 		#findrecord['cves'] = [Cveid]
 		findrecord['numberofcve'] = 1
 		keyscore = str(int(jsoncve["baseScore"]))
-		findrecord['scorestat'] = {}
-		findrecord['scorestat'][keyscore] = 1
+		findrecord['scorestat'] = {keyscore: 1}
 		findrecord['avgscore'] = jsoncve["baseScore"]
 		newstat = getNewVultypeStat("add", [], jsoncve)
 		findrecord['vulstat'] = newstat
 		mongo.db.versions.insert_one(findrecord)
 
-		findlist = {}
 		findlist["nameid"] = versionstr
 		newlist = { "$set": { "cves": [Cveid] } }
 		mongo.db.cvelists.update_one(findlist, newlist, upsert=True)
@@ -248,61 +219,47 @@ def addCveidtoVersion(versionstr, jsoncve):
 		newscore = getNewScoreAvg("add", cursor["scorestat"], cursor["avgscore"], cursor["numberofcve"], jsoncve)
 		newstat = getNewVultypeStat("add", cursor["vulstat"], jsoncve)
 
-		newvalues ={}
-		#newvalues["$addToSet"] = { "cves": Cveid }
-		newvalues["$inc"] = { "numberofcve": 1 }
 		setstat = { "vulstat": newstat }
-		newvalues["$set"] = {**newscore, **setstat}
+		newvalues = {"$inc": {"numberofcve": 1}, "$set": {**newscore, **setstat}}
 		mongo.db.versions.update_one(findrecord, newvalues)
 
-		newlist = {}
-		newlist["$addToSet"] = { "cves": Cveid }
-		findlist = {}
+		newlist = {"$addToSet": {"cves": Cveid}}
 		findlist["nameid"] = versionstr
 		mongo.db.cvelists.update_one(findlist, newlist)
 
 def delCveidfromVersion(versionstr, jsoncve):
 	Cveid = jsoncve["CVEID"]
-	findrecord = {}
-	findrecord['versionid'] = versionstr
+	findrecord = {'versionid': versionstr}
 	cursor = mongo.db.versions.find_one(findrecord)
 	if cursor != None:
 		newscore = getNewScoreAvg("del", cursor["scorestat"], cursor["avgscore"], cursor["numberofcve"], jsoncve)
 		newstat = getNewVultypeStat("del", cursor["vulstat"], jsoncve)
 
-		newvalues ={}
-		newvalues["$inc"] = { "numberofcve": -1 }
 		setstat = { "vulstat": newstat }
-		#setcve = { "cves": newlst }
-		#newvalues["$set"] = {**newscore, **setstat, **setcve}
-		newvalues["$set"] = {**newscore, **setstat}
+		newvalues = {"$inc": {"numberofcve": -1}, "$set": {**newscore, **setstat}}
 		mongo.db.versions.update_one(findrecord, newvalues)
 
 		currentlst = getCveList(versionstr)
-		newlst = list(set(currentlst) - set([Cveid]))
-		newlist = {}
-		newlist["$set"] = { "cves": newlst }
-		findlist = {}
-		findlist["nameid"] = versionstr
+		newlst = list(set(currentlst) - {Cveid})
+		newlist = {"$set": {"cves": newlst}}
+		findlist = {"nameid": versionstr}
 		mongo.db.cvelists.update_one(findlist, newlist)
 
 def addCveidtoProduct(productstr, versionstr, jsoncve):
 	Cveid = jsoncve["CVEID"]
-	findrecord = {}
-	findrecord['productid'] = productstr
+	findrecord = {'productid': productstr}
+	findlist = {}
 	if mongo.db.products.count_documents(findrecord) == 0:
 		#findrecord['cves'] = [Cveid]
 		findrecord['versions'] = [versionstr]
 		findrecord['numberofcve'] = 1
 		keyscore = str(int(jsoncve["baseScore"]))
-		findrecord['scorestat'] = {}
-		findrecord['scorestat'][keyscore] = 1
+		findrecord['scorestat'] = {keyscore: 1}
 		findrecord['avgscore'] = jsoncve["baseScore"]
 		newstat = getNewVultypeStat("add", [], jsoncve)
 		findrecord['vulstat'] = newstat
 		mongo.db.products.insert_one(findrecord)
 
-		findlist = {}
 		findlist["nameid"] = productstr
 		newlist = { "$set": { "cves": [Cveid] } }
 		mongo.db.cvelists.update_one(findlist, newlist, upsert=True)
@@ -311,64 +268,50 @@ def addCveidtoProduct(productstr, versionstr, jsoncve):
 		newscore = getNewScoreAvg("add", cursor["scorestat"], cursor["avgscore"], cursor["numberofcve"], jsoncve)
 		newstat = getNewVultypeStat("add", cursor["vulstat"], jsoncve)
 
-		newvalues ={}
 		#setcve = { "cves": Cveid }
 		setversion = { "versions": versionstr }
-		#newvalues["$addToSet"] = {**setcve, **setversion}
-		newvalues["$addToSet"] = {**setversion}
-		newvalues["$inc"] = { "numberofcve": 1 }
+		newvalues = {"$addToSet": {**setversion}, "$inc": {"numberofcve": 1}}
 		setstat = { "vulstat": newstat }
 		newvalues["$set"] = {**newscore, **setstat}
 		mongo.db.products.update_one(findrecord, newvalues)
 
-		newlist = {}
-		newlist["$addToSet"] = { "cves": Cveid }
-		findlist = {}
+		newlist = {"$addToSet": {"cves": Cveid}}
 		findlist["nameid"] = productstr
 		mongo.db.cvelists.update_one(findlist, newlist)
 
 def delCveidfromProduct(productstr, jsoncve):
 	Cveid = jsoncve["CVEID"]
-	findrecord = {}
-	findrecord['productid'] = productstr
+	findrecord = {'productid': productstr}
 	cursor = mongo.db.products.find_one(findrecord)
 	if cursor != None:
 		newscore = getNewScoreAvg("del", cursor["scorestat"], cursor["avgscore"], cursor["numberofcve"], jsoncve)
 		newstat = getNewVultypeStat("del", cursor["vulstat"], jsoncve)
 
-		newvalues ={}
-		newvalues["$inc"] = { "numberofcve": -1 }
 		setstat = { "vulstat": newstat }
-		#setcve = { "cves": newlst }
-		#newvalues["$set"] = {**newscore, **setstat, **setcve}
-		newvalues["$set"] = {**newscore, **setstat}
+		newvalues = {"$inc": {"numberofcve": -1}, "$set": {**newscore, **setstat}}
 		mongo.db.products.update_one(findrecord, newvalues)
 
 		currentlst = getCveList(productstr)
-		newlst = list(set(currentlst) - set([Cveid]))
-		newlist = {}
-		newlist["$set"] = { "cves": newlst }
-		findlist = {}
-		findlist["nameid"] = productstr
+		newlst = list(set(currentlst) - {Cveid})
+		newlist = {"$set": {"cves": newlst}}
+		findlist = {"nameid": productstr}
 		mongo.db.cvelists.update_one(findlist, newlist)
 
 def addCveidtoVendor(vendorstr, productstr, jsoncve):
 	Cveid = jsoncve["CVEID"]
-	findrecord = {}
-	findrecord['vendorid'] = vendorstr
+	findrecord = {'vendorid': vendorstr}
+	findlist = {}
 	if mongo.db.vendors.count_documents(findrecord) == 0:
 		#findrecord['cves'] = [Cveid]
 		findrecord['products'] = [productstr]
 		findrecord['numberofcve'] = 1
 		keyscore = str(int(jsoncve["baseScore"]))
-		findrecord['scorestat'] = {}
-		findrecord['scorestat'][keyscore] = 1
+		findrecord['scorestat'] = {keyscore: 1}
 		findrecord['avgscore'] = jsoncve["baseScore"]
 		newstat = getNewVultypeStat("add", [], jsoncve)
 		findrecord['vulstat'] = newstat
 		mongo.db.vendors.insert_one(findrecord)
 
-		findlist = {}
 		findlist["nameid"] = vendorstr
 		newlist = { "$set": { "cves": [Cveid] } }
 		mongo.db.cvelists.update_one(findlist, newlist, upsert=True)
@@ -377,43 +320,33 @@ def addCveidtoVendor(vendorstr, productstr, jsoncve):
 		newscore = getNewScoreAvg("add", cursor["scorestat"], cursor["avgscore"], cursor["numberofcve"], jsoncve)
 		newstat = getNewVultypeStat("add", cursor["vulstat"], jsoncve)
 
-		newvalues ={}
-		#newvalues["$addToSet"] = {**setcve, **setproduct}
-		newvalues["$addToSet"] = { "products": productstr }
-		newvalues["$inc"] = { "numberofcve": 1 }
+		newvalues = {"$addToSet": {"products": productstr}, "$inc": {"numberofcve": 1}}
 		setstat = { "vulstat": newstat }
 		newvalues["$set"] = {**newscore, **setstat}
 		mongo.db.vendors.update_one(findrecord, newvalues)
 
-		newlist = {}
 		setcve = { "cves": Cveid }
-		newlist["$addToSet"] = {**setcve}
-		findlist = {}
+		newlist = {"$addToSet": {**setcve}}
 		findlist["nameid"] = vendorstr
 		mongo.db.cvelists.update_one(findlist, newlist)
 
 def delCveidfromVendor(vendorstr, jsoncve):
 	Cveid = jsoncve["CVEID"]
-	findrecord = {}
-	findrecord['vendorid'] = vendorstr
+	findrecord = {'vendorid': vendorstr}
 	cursor = mongo.db.vendors.find_one(findrecord)
 	if cursor != None:
 		newscore = getNewScoreAvg("del", cursor["scorestat"], cursor["avgscore"], cursor["numberofcve"], jsoncve)
 		newstat = getNewVultypeStat("del", cursor["vulstat"], jsoncve)
 
-		newvalues ={}
-		newvalues["$inc"] = { "numberofcve": -1 }
 		setstat = { "vulstat": newstat }
-		#newvalues["$set"] = {**newscore, **setstat, **setcve}
-		newvalues["$set"] = {**newscore, **setstat}
+		newvalues = {"$inc": {"numberofcve": -1}, "$set": {**newscore, **setstat}}
 		mongo.db.vendors.update_one(findrecord, newvalues)
 
 		currentlst = getCveList(vendorstr)
-		newlst = list(set(currentlst) - set([Cveid]))
+		newlst = list(set(currentlst) - {Cveid})
 		newlist = {}
 		newlist["$set"] = setcve = { "cves": newlst }
-		findlist = {}
-		findlist["nameid"] = vendorstr
+		findlist = {"nameid": vendorstr}
 		mongo.db.cvelists.update_one(findlist, newlist)
 
 # recursive function
@@ -429,10 +362,8 @@ def getAllcpeUriFromConf(ConJson, retCpeUri):
 	elif type(ConJson) == list:
 		for i in ConJson:
 			retCpeUri = getAllcpeUriFromConf(i, retCpeUri)
-	elif type(ConJson) == str or type(ConJson) == bool:
-		pass
-	else:
-		logging.error("Wrong format getAllcpeUriFromConf %s" % ConJson)
+	elif type(ConJson) not in [str, bool]:
+		logging.error(f"Wrong format getAllcpeUriFromConf {ConJson}")
 	return retCpeUri
 
 import re
@@ -441,8 +372,8 @@ def testFilter(typestr, arrfilter):
 	cvefiles = [f for f in listdir("CVEData") if isfile(join("CVEData", f))]
 	arr = []
 	for cvefile in cvefiles:
-		print("[+] %s" % cvefile)
-		with open("CVEData/" + cvefile, 'r') as file:
+		print(f"[+] {cvefile}")
+		with open(f"CVEData/{cvefile}", 'r') as file:
 			cvedata = [json.loads(line) for line in file]
 		numcve = 0
 		for cve in cvedata:
@@ -450,20 +381,17 @@ def testFilter(typestr, arrfilter):
 				numcve = numcve + 1
 				if numcve == 2000:
 					break
-				if "Vulnerability Type(s)" in cve.keys():
-					if typestr in cve["Vulnerability Type(s)"].lower():
-						cvejs = getCVE(cve["CVE ID"])
-						arr.append(cvejs["cve"]["description"]["description_data"][0]["value"].lower())
+				if (
+					"Vulnerability Type(s)" in cve.keys()
+					and typestr in cve["Vulnerability Type(s)"].lower()
+				):
+					cvejs = getCVE(cve["CVE ID"])
+					arr.append(cvejs["cve"]["description"]["description_data"][0]["value"].lower())
 			except Exception as e:
-				logging.error("Exception in getTypeFilter %s" % e)
-				pass
+				logging.error(f"Exception in getTypeFilter {e}")
 	im = 0
 	for a in arr:
-		bfound = False
-		for b in arrfilter:
-			if len(re.findall(b,a))>0:
-				bfound = True
-				break
+		bfound = any(len(re.findall(b,a))>0 for b in arrfilter)
 		if bfound:
 			im = im + 1
 		else:
@@ -471,12 +399,7 @@ def testFilter(typestr, arrfilter):
 	logging.info("out: %d/%d" % (im, len(arr)))
 
 def checkKeywordinDescription(desc, kws):
-	bfound = False
-	for kw in kws:
-		if len(re.findall(kw, desc)) > 0:
-			bfound = True
-			break
-	return bfound
+	return any(len(re.findall(kw, desc)) > 0 for kw in kws)
 
 #testFilter("exec code",[r"(code|command).*(execution|execute)", r"(execution|execute).*(code|command)"])
 #out: 10552/10552
@@ -501,7 +424,7 @@ def checkKeywordinDescription(desc, kws):
 #testFilter("priv",[r"(gain|escalat).*privil", r"privil.*(gain|escalat)"])
 #out: 1910/1910
 def getVulTypeFromCVE(cve):
-	logging.info("Get Vul type of %s" % cve["CVEID"])
+	logging.info(f'Get Vul type of {cve["CVEID"]}')
 	try:
 		cvedesc = cve["cve"]["description"]["description_data"][0]["value"].lower()
 	except Exception:
@@ -518,43 +441,55 @@ def getVulTypeFromCVE(cve):
 	if checkKeywordinDescription(cvedesc, [r"denial of service"]):
 		vultype.append("dos")
 	#memory_corruption
-	if cvecwe in ["cwe-119", "cwe-120", "cwe-190"]:
-		vultype.append("memory_corruption")
-	elif checkKeywordinDescription(cvedesc, [r"overflow", r"(restrict|crash|invalid|violat|corrupt).*(buffer|stack|heap|memory)", r"(buffer|stack|heap|memory).*(restrict|crash|invalid|violat|corrupt)"]):
+	if (
+		cvecwe in {"cwe-119", "cwe-120", "cwe-190"}
+		or cvecwe not in ["cwe-119", "cwe-120", "cwe-190"]
+		and checkKeywordinDescription(
+			cvedesc,
+			[
+				r"overflow",
+				r"(restrict|crash|invalid|violat|corrupt).*(buffer|stack|heap|memory)",
+				r"(buffer|stack|heap|memory).*(restrict|crash|invalid|violat|corrupt)",
+			],
+		)
+	):
 		vultype.append("memory_corruption")
 	#sql_injection
-	if cvecwe == "cwe-89":
-		vultype.append("sql_injection")
-	#xss
 	if cvecwe == "cwe-79":
 		vultype.append("xss")
+	elif cvecwe == "cwe-89":
+		vultype.append("sql_injection")
 	#path_traversal
-	if cvecwe == "cwe-22":
-		vultype.append("path_traversal")
-	elif checkKeywordinDescription(cvedesc, [r"directory traversal"]):
+	if (
+		cvecwe == "cwe-22"
+		or cvecwe != "cwe-22"
+		and checkKeywordinDescription(cvedesc, [r"directory traversal"])
+	):
 		vultype.append("path_traversal")
 	#bypass_something
 	if checkKeywordinDescription(cvedesc, [r"bypass"]):
 		vultype.append("bypass_something")
 	#information_exposure
-	if cvecwe == "cwe-200":
-		vultype.append("information_exposure")
-	elif checkKeywordinDescription(cvedesc, [r"man-in-the-middle"]):
+	if (
+		cvecwe == "cwe-200"
+		or cvecwe != "cwe-200"
+		and checkKeywordinDescription(cvedesc, [r"man-in-the-middle"])
+	):
 		vultype.append("information_exposure")
 	#privilege_escalation
 	if checkKeywordinDescription(cvedesc, [r"(gain|escalat).*privil", r"privil.*(gain|escalat)"]):
 		vultype.append("privilege_escalation")
-	if len(vultype) == 0:
+	if not vultype:
 		vultype.append("other")
-	logging.info("Vultype is %s" % vultype)
+	logging.info(f"Vultype is {vultype}")
 	return vultype
 
 # Main function in convert cve json to mongodb
 # return integer: number of cve imported, return -1 if error
 def importCVEFromJsonfile(JsonfilePath):
-	logging.info("importCVEFromJsonfile start with file %s" % JsonfilePath)
+	logging.info(f"importCVEFromJsonfile start with file {JsonfilePath}")
 	if not os.path.isfile(JsonfilePath):
-		logging.error("File %s is not exist" % JsonfilePath)
+		logging.error(f"File {JsonfilePath} is not exist")
 		return -1
 	# read file to json
 	with open(JsonfilePath, encoding="utf8") as f:
@@ -572,12 +507,12 @@ def importCVEFromJsonfile(JsonfilePath):
 		try:
 			# keep raw data and get up some importance properties to first level properties
 			cveid = cvejson['cve']['CVE_data_meta']['ID']
-			logging.info("Processing ID %s" % cveid)
+			logging.info(f"Processing ID {cveid}")
 			if 'impact' not in cvejson.keys() or 'baseMetricV2' not in cvejson['impact'].keys():
-				logging.info("The CVE %s has not any information" % cveid)
+				logging.info(f"The CVE {cveid} has not any information")
 				continue
 			if checkCveExist(cveid):
-				logging.info("CVE %s is existing!" % cveid)
+				logging.info(f"CVE {cveid} is existing!")
 				continue
 			if 'baseMetricV3' in cvejson['impact'].keys():
 				cvejson['baseScore'] = cvejson['impact']['baseMetricV3']['cvssV3']['baseScore']
@@ -588,7 +523,10 @@ def importCVEFromJsonfile(JsonfilePath):
 			cvejson['CVEID'] = cveid
 			vultype = getVulTypeFromCVE(cvejson)
 			cvejson['vultype'] = vultype
-			cvejson['history'] = ["Created at %s from %s" % (datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), os.path.basename(JsonfilePath))]
+			cvejson['history'] = [
+				f'Created at {datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")} from {os.path.basename(JsonfilePath)}'
+			]
+
 			lstcpe = []
 			cvejson['affected'] =  getAllcpeUriFromConf(cvejson['configurations'], lstcpe)
 			cveobjid = insertNewCVE(cvejson)
@@ -596,8 +534,8 @@ def importCVEFromJsonfile(JsonfilePath):
 				time.sleep(1)
 				# retry
 				cveobjid = insertNewCVE(cvejson)
-				if cveobjid == -1:
-					exit(-1)
+			if cveobjid == -1:
+				exit(-1)
 			updateVulTypeCollection(cvejson["CVEID"], vultype)
 
 			# 3. push cveid to vendors, product and version collections
@@ -606,18 +544,16 @@ def importCVEFromJsonfile(JsonfilePath):
 				addCveidtoVersion(versionstr, cvejson)
 				arraf = versionstr.split(':')
 				vendorstr = arraf[1]
-				productstr = "%s:%s:%s" % (arraf[0], arraf[1], arraf[2])
+				productstr = f"{arraf[0]}:{arraf[1]}:{arraf[2]}"
 				# 3.2 push to product
 				addCveidtoProduct(productstr, versionstr, cvejson)
 				# 3.3 push to vendor
 				addCveidtoVendor(vendorstr, productstr, cvejson)
 			retcount = retcount + 1
 		except Exception as e:
-			logging.error("Exception in importCVEFromJsonfile %s" % e)
+			logging.error(f"Exception in importCVEFromJsonfile {e}")
 			traceback.print_exc()
-			pass
-
-	logging.info("importCVEFromJsonfile done with file %s" % JsonfilePath)
+	logging.info(f"importCVEFromJsonfile done with file {JsonfilePath}")
 	return retcount
 
 def updateCVEFromJsonfile(JsonfilePath):
